@@ -1,6 +1,6 @@
 # youtube2podcast
 
-Converts YouTube videos into a podcast feed hosted on Cloudflare R2.
+Converts YouTube channels into a podcast feed hosted on Cloudflare R2.
 
 ## Requirements
 
@@ -22,32 +22,27 @@ Converts YouTube videos into a podcast feed hosted on Cloudflare R2.
    ```
    Get these from **Cloudflare Dashboard → R2 → Manage R2 API Tokens**.
 
-3. Edit `config.yaml` with your podcast metadata and R2 bucket details:
-   - `endpoint_url`: found in **R2 → your bucket → Settings**
-   - `public_base_url`: the R2.dev public URL from **R2 → your bucket → Settings → Public access**
+3. Edit `config.yaml`:
+   - Fill in your podcast metadata (`title`, `author`, `description`)
+   - Set `endpoint_url` — found in **R2 → your bucket → Settings**
+   - Set `public_base_url` — the R2.dev public URL from **R2 → your bucket → Settings → Public access**
+   - Add your YouTube channels:
+     ```yaml
+     youtube_channels:
+       - https://www.youtube.com/@channelhandle
+     ```
 
 ## Usage
-
-Add YouTube URLs to `episodes.yaml`:
-
-```yaml
-episodes:
-  - url: https://www.youtube.com/watch?v=EXAMPLE
-```
-
-Then sync:
 
 ```bash
 make sync
 ```
 
-This downloads each new episode as MP3, uploads it to R2, and regenerates `feed.xml`.
-The feed URL is printed at the end — paste it into Apple Podcasts via **File → Add Show by URL**.
+This will:
+1. Fetch the 10 most recent videos from each configured channel
+2. Show an interactive checklist — select the episodes you want
+3. Download any new selections as MP3 (already-downloaded episodes are cached in `downloads/`)
+4. Replace all MP3s on R2 with the current selection and regenerate `feed.xml`
+5. Print the feed URL
 
-### Test locally (no R2 needed)
-
-```bash
-make download
-```
-
-Downloads MP3s to `downloads/` without uploading anything.
+Paste the feed URL into Apple Podcasts via **File → Add Show by URL**.
