@@ -1,0 +1,22 @@
+podcast:
+  title: "Youtube videos as podcasts"
+  author: "Dmitrii S"
+  description: "Podcasts generated from YouTube videos by Claude Code"
+  language: "en"
+  email: "" # optional; shown in iTunes author tag
+  image_url: "" # optional; URL to podcast cover art (1400x1400 recommended)
+
+r2:
+  bucket_name: "yt-podcasts"
+  endpoint_url: "https://2731eaec2792400f1d2ba8f2e8c060f4.r2.cloudflarestorage.com"
+  public_base_url: "https://pub-60aa7868c295478c8781bd2920467dbb.r2.dev"
+  feed_filename: "feed.xml"
+
+youtube_channels:
+  # Add YouTube channel URLs here:
+  # - https://www.youtube.com/@channelhandle
+  - https://www.youtube.com/@AsafevLife
+  - https://www.youtube.com/@AsafevStas
+  - https://www.youtube.com/@broken_dance
+  - https://www.youtube.com/@vdud
+  - https://www.youtube.com/@avi_kazaryan

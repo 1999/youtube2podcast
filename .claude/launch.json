@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sync",
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": ["sync.py"],
+      "port": 0
+    },
+    {
+      "name": "download (local, no R2)",
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": ["sync.py", "--local"],
+      "port": 0
+    }
+  ]
+}
