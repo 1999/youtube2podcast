@@ -3,8 +3,8 @@ podcast:
   author: "Dmitrii S"
   description: "Podcasts generated from YouTube videos by Claude Code"
   language: "en"
-  email: "" # optional; shown in iTunes author tag
-  image_url: "" # optional; URL to podcast cover art (1400x1400 recommended)
+  email: "dsorin2035@gmail.com" # optional; shown in iTunes author tag
+  image_url: "https://avatars.githubusercontent.com/u/73191?v=4" # optional; URL to podcast cover art (1400x1400 recommended)
 
 r2:
   bucket_name: "yt-podcasts"
@@ -12,11 +12,20 @@ r2:
   public_base_url: "https://pub-60aa7868c295478c8781bd2920467dbb.r2.dev"
   feed_filename: "feed.xml"
 
+filter: videos  # videos | shorts | all
+
 youtube_channels:
   # Add YouTube channel URLs here:
   # - https://www.youtube.com/@channelhandle
   - https://www.youtube.com/@AsafevLife
   - https://www.youtube.com/@AsafevStas
-  - https://www.youtube.com/@broken_dance
-  - https://www.youtube.com/@vdud
   - https://www.youtube.com/@avi_kazaryan
+  - https://www.youtube.com/@broken_dance
+  - https://www.youtube.com/@Droiderru
+  - https://www.youtube.com/@gorodnitskiy
+  - https://www.youtube.com/@MovieFactsRU
+  - https://www.youtube.com/@NOMERCYRADIO
+  - https://www.youtube.com/@rozetked
+  - https://www.youtube.com/@tennis_bolshoi
+  - https://www.youtube.com/@thanks-will-listen
+  - https://www.youtube.com/@vdud
