@@ -249,26 +249,6 @@ def upload_file(client, bucket: str, local_path: Path, key: str) -> int:
     return file_size
 
 
-def delete_r2_episodes(client, bucket: str) -> int:
-    deleted = 0
-    kwargs: dict = {"Bucket": bucket}
-    while True:
-        page = client.list_objects_v2(**kwargs)
-        mp3_keys = [
-            obj["Key"] for obj in page.get("Contents") or []
-            if obj["Key"].endswith(".mp3")
-        ]
-        if mp3_keys:
-            client.delete_objects(
-                Bucket=bucket,
-                Delete={"Objects": [{"Key": k} for k in mp3_keys]},
-            )
-            deleted += len(mp3_keys)
-        if not page.get("IsTruncated"):
-            break
-        kwargs["ContinuationToken"] = page["NextContinuationToken"]
-    return deleted
-
 
 def build_feed(cfg: dict, state: dict) -> bytes:
     pc = cfg["podcast"]
@@ -361,11 +341,6 @@ def main() -> None:
 
     if not selected:
         sys.exit("No episodes successfully processed.")
-
-    # Wipe R2 MP3s and re-upload selected
-    print(f"\nDeleting existing MP3s from R2...")
-    deleted = delete_r2_episodes(r2_client, cfg["r2"]["bucket_name"])
-    print(f"  Deleted {deleted} file(s).")
 
     feed_state = {
         v["video_id"]: state[v["video_id"]]
