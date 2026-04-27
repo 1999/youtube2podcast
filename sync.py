@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import boto3
-import questionary
 import yaml
 from botocore.config import Config
 from dotenv import load_dotenv
@@ -119,31 +118,27 @@ def download_audio(url: str, filename: str, output_dir: str) -> tuple[Path, dict
     return output_path, info
 
 
-def fetch_channel_videos(channel_url: str) -> list[dict]:
-    fetch_url = channel_url.rstrip("/")
-    if not any(fetch_url.endswith(s) for s in ("/videos", "/shorts", "/streams")):
-        fetch_url += "/videos"
-
+def _fetch_tab(base_url: str, tab: str, channel_url: str) -> list[dict]:
+    fetch_url = f"{base_url}/{tab}"
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "extract_flat": True,
-        "playlistend": 10,
+        "playlistend": 3,
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(fetch_url, download=False)
     except Exception as e:
-        print(f"  WARNING: Failed to fetch {channel_url}: {e}", file=sys.stderr)
+        print(f"  WARNING: Failed to fetch {fetch_url}: {e}", file=sys.stderr)
         return []
 
     channel_name = (
         info.get("uploader") or info.get("channel") or
         info.get("title") or channel_url
     )
-    entries = info.get("entries") or []
     videos = []
-    for entry in entries:
+    for entry in info.get("entries") or []:
         if not entry or not entry.get("id"):
             continue
         videos.append({
@@ -158,53 +153,22 @@ def fetch_channel_videos(channel_url: str) -> list[dict]:
     return videos
 
 
-def prompt_episode_selection(all_videos: list[dict], state: dict) -> list[dict]:
-    choices = []
+def fetch_channel_videos(channel_url: str, filter_type: str = "videos") -> list[dict]:
+    base = channel_url.rstrip("/")
+    for suffix in ("/videos", "/shorts", "/streams"):
+        if base.endswith(suffix):
+            base = base[: -len(suffix)]
+            break
 
-    # Group by channel
-    seen_channels = []
-    by_channel: dict[str, list[dict]] = {}
-    for v in all_videos:
-        ch = v["channel_url"]
-        if ch not in by_channel:
-            by_channel[ch] = []
-            seen_channels.append(ch)
-        by_channel[ch].append(v)
+    if filter_type == "all":
+        seen: dict[str, dict] = {}
+        for tab in ("videos", "shorts"):
+            for v in _fetch_tab(base, tab, channel_url):
+                seen.setdefault(v["video_id"], v)
+        return list(seen.values())
 
-    for channel_url in seen_channels:
-        videos = by_channel[channel_url]
-        channel_name = videos[0]["channel_name"]
-        # Add a separator line for the channel
-        choices.append(
-            questionary.Choice(
-                title=f"── {channel_name} ──",
-                value=None,
-                disabled="",
-            )
-        )
-        for v in videos:
-            cached = v["video_id"] in state
-            label = f"  {v['title']} ({format_duration(v['duration'])})"
-            if cached:
-                label += "  [cached]"
-            choices.append(questionary.Choice(title=label, value=v))
+    return _fetch_tab(base, filter_type, channel_url)
 
-    selected = questionary.checkbox(
-        "Select episodes to include in your podcast feed:",
-        choices=choices,
-    ).ask()
-
-    if selected is None:
-        sys.exit(0)
-
-    # Filter out any None values (shouldn't happen since headers are disabled)
-    selected = [v for v in selected if v is not None]
-
-    if not selected:
-        print("No episodes selected.")
-        sys.exit(0)
-
-    return selected
 
 
 def download_and_cache(video: dict, downloads_dir: Path, state: dict) -> dict | None:
@@ -362,20 +326,21 @@ def main() -> None:
     downloads_dir = Path("downloads")
     downloads_dir.mkdir(exist_ok=True)
 
+    filter_type = cfg.get("filter", "videos")
+
     # Fetch recent videos from all channels
     all_videos = []
     for channel_url in cfg["youtube_channels"]:
         print(f"Fetching videos from {channel_url}...")
-        videos = fetch_channel_videos(channel_url)
+        videos = fetch_channel_videos(channel_url, filter_type)
         print(f"  Found {len(videos)} video(s)")
         all_videos.extend(videos)
 
     if not all_videos:
         sys.exit("No videos found from any channel.")
 
-    # Interactive selection
-    selected = prompt_episode_selection(all_videos, state)
-    print(f"\n{len(selected)} episode(s) selected.")
+    selected = all_videos
+    print(f"\n{len(selected)} episode(s) to process.")
 
     # Fail fast on R2 credentials before any downloading
     try:
