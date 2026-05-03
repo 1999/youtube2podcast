@@ -231,6 +231,15 @@ def make_r2_client(cfg: dict):
     )
 
 
+def file_exists_in_r2(client, bucket: str, key: str) -> bool:
+    from botocore.exceptions import ClientError
+    try:
+        client.head_object(Bucket=bucket, Key=key)
+        return True
+    except ClientError:
+        return False
+
+
 def upload_file(client, bucket: str, local_path: Path, key: str) -> int:
     suffix = local_path.suffix.lower()
     content_type = {
@@ -349,10 +358,19 @@ def main() -> None:
     }
 
     print(f"\nUploading {len(feed_state)} episode(s) to R2...")
+    uploaded = 0
+    skipped = 0
     for video_id, entry in feed_state.items():
         local_path = downloads_dir / entry["filename"]
-        print(f"  {entry['filename']}...")
-        upload_file(r2_client, cfg["r2"]["bucket_name"], local_path, entry["filename"])
+        key = entry["filename"]
+        if file_exists_in_r2(r2_client, cfg["r2"]["bucket_name"], key):
+            print(f"  {key} (already in R2, skipping)")
+            skipped += 1
+        else:
+            print(f"  {key}...")
+            upload_file(r2_client, cfg["r2"]["bucket_name"], local_path, key)
+            uploaded += 1
+    print(f"  {uploaded} uploaded, {skipped} skipped.")
 
     # Generate and upload feed
     print("\nUploading feed.xml...")
