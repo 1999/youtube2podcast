@@ -15,12 +15,14 @@ Converts YouTube channels into a podcast feed hosted on Cloudflare R2.
    make setup
    ```
 
-2. Copy `.env.example` to `.env` and fill in your Cloudflare R2 API credentials:
+2. Copy `.env.example` to `.env` and fill in your credentials:
    ```
    R2_ACCESS_KEY_ID=...
    R2_SECRET_ACCESS_KEY=...
+   YOUTUBE_API_KEY=...
    ```
-   Get these from **Cloudflare Dashboard → R2 → Manage R2 API Tokens**.
+   - R2 credentials: **Cloudflare Dashboard → R2 → Manage R2 API Tokens**
+   - YouTube API key: **[Google Cloud Console](https://console.cloud.google.com) → APIs & Services → Credentials → Create API key**, with YouTube Data API v3 enabled
 
 3. Edit `config.yaml`:
    - Fill in your podcast metadata (`title`, `author`, `description`)
@@ -39,10 +41,9 @@ make sync
 ```
 
 This will:
-1. Fetch the 10 most recent videos from each configured channel
-2. Show an interactive checklist — select the episodes you want
-3. Download any new selections as MP3 (already-downloaded episodes are cached in `downloads/`)
-4. Replace all MP3s on R2 with the current selection and regenerate `feed.xml`
-5. Print the feed URL
+1. Fetch the 3 most recent videos from each configured channel via the YouTube Data API
+2. Download any new videos as MP3 (already-downloaded episodes are cached in `downloads/`)
+3. Upload new MP3s to R2 and regenerate `feed.xml`
+4. Print the feed URL
 
 Paste the feed URL into Apple Podcasts via **File → Add Show by URL**.

@@ -1,7 +1,10 @@
 import json
 import os
+import re
 import sys
 import tempfile
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -118,56 +121,89 @@ def download_audio(url: str, filename: str, output_dir: str) -> tuple[Path, dict
     return output_path, info
 
 
-def _fetch_tab(base_url: str, tab: str, channel_url: str) -> list[dict]:
-    fetch_url = f"{base_url}/{tab}"
-    ydl_opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "extract_flat": True,
-        "playlistend": 3,
-    }
+def _youtube_api_get(endpoint: str, params: dict) -> dict:
+    url = "https://www.googleapis.com/youtube/v3/" + endpoint + "?" + urllib.parse.urlencode(params)
+    with urllib.request.urlopen(url) as resp:
+        return json.loads(resp.read())
+
+
+def _parse_iso_duration(duration: str) -> int:
+    m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration or "")
+    if not m:
+        return 0
+    return int(m.group(1) or 0) * 3600 + int(m.group(2) or 0) * 60 + int(m.group(3) or 0)
+
+
+def _resolve_uploads_playlist(channel_url: str, api_key: str) -> tuple[str, str]:
+    url = channel_url.rstrip("/")
+    if "/channel/" in url:
+        params = {"part": "contentDetails", "id": url.split("/channel/")[-1].split("/")[0], "key": api_key}
+    elif "/@" in url:
+        params = {"part": "contentDetails", "forHandle": url.split("/@")[-1].split("/")[0], "key": api_key}
+    elif "/user/" in url:
+        params = {"part": "contentDetails", "forUsername": url.split("/user/")[-1].split("/")[0], "key": api_key}
+    else:
+        raise ValueError(f"Unsupported channel URL format: {channel_url}")
+
+    data = _youtube_api_get("channels", params)
+    items = data.get("items") or []
+    if not items:
+        raise ValueError(f"Channel not found: {channel_url}")
+    channel_id = items[0]["id"]
+    uploads_playlist_id = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
+    return channel_id, uploads_playlist_id
+
+
+def fetch_channel_videos(channel_url: str, api_key: str, max_results: int = 3) -> list[dict]:
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(fetch_url, download=False)
+        _, uploads_playlist_id = _resolve_uploads_playlist(channel_url, api_key)
     except Exception as e:
-        print(f"  WARNING: Failed to fetch {fetch_url}: {e}", file=sys.stderr)
+        print(f"  WARNING: Failed to resolve channel: {e}", file=sys.stderr)
         return []
 
-    channel_name = (
-        info.get("uploader") or info.get("channel") or
-        info.get("title") or channel_url
-    )
+    try:
+        playlist_data = _youtube_api_get("playlistItems", {
+            "part": "snippet",
+            "playlistId": uploads_playlist_id,
+            "maxResults": max_results,
+            "key": api_key,
+        })
+    except Exception as e:
+        print(f"  WARNING: Failed to fetch playlist: {e}", file=sys.stderr)
+        return []
+
+    items = playlist_data.get("items") or []
+    if not items:
+        return []
+
+    video_ids = [item["snippet"]["resourceId"]["videoId"] for item in items]
+
+    try:
+        videos_data = _youtube_api_get("videos", {
+            "part": "snippet,contentDetails",
+            "id": ",".join(video_ids),
+            "key": api_key,
+        })
+    except Exception as e:
+        print(f"  WARNING: Failed to fetch video details: {e}", file=sys.stderr)
+        return []
+
     videos = []
-    for entry in info.get("entries") or []:
-        if not entry or not entry.get("id"):
-            continue
+    for item in videos_data.get("items") or []:
+        video_id = item["id"]
+        snippet = item["snippet"]
+        published_at = snippet.get("publishedAt", "")
+        upload_date = published_at[:10].replace("-", "") if published_at else ""
         videos.append({
-            "video_id": entry["id"],
-            "url": f"https://www.youtube.com/watch?v={entry['id']}",
-            "title": entry.get("title") or f"Video {entry['id']}",
-            "duration": entry.get("duration"),
-            "upload_date": entry.get("upload_date"),
+            "video_id": video_id,
+            "url": f"https://www.youtube.com/watch?v={video_id}",
+            "title": snippet.get("title") or f"Video {video_id}",
+            "duration": _parse_iso_duration(item["contentDetails"].get("duration", "")),
+            "upload_date": upload_date,
             "channel_url": channel_url,
-            "channel_name": channel_name,
+            "channel_name": snippet.get("channelTitle") or channel_url,
         })
     return videos
-
-
-def fetch_channel_videos(channel_url: str, filter_type: str = "videos") -> list[dict]:
-    base = channel_url.rstrip("/")
-    for suffix in ("/videos", "/shorts", "/streams"):
-        if base.endswith(suffix):
-            base = base[: -len(suffix)]
-            break
-
-    if filter_type == "all":
-        seen: dict[str, dict] = {}
-        for tab in ("videos", "shorts"):
-            for v in _fetch_tab(base, tab, channel_url):
-                seen.setdefault(v["video_id"], v)
-        return list(seen.values())
-
-    return _fetch_tab(base, filter_type, channel_url)
 
 
 
@@ -309,19 +345,21 @@ def build_feed(cfg: dict, state: dict) -> bytes:
 def main() -> None:
     load_dotenv()
 
+    api_key = os.environ.get("YOUTUBE_API_KEY")
+    if not api_key:
+        sys.exit("Error: YOUTUBE_API_KEY environment variable not set.")
+
     cfg = load_config()
     state = load_state()
 
     downloads_dir = Path("downloads")
     downloads_dir.mkdir(exist_ok=True)
 
-    filter_type = cfg.get("filter", "videos")
-
     # Fetch recent videos from all channels
     all_videos = []
     for channel_url in cfg["youtube_channels"]:
         print(f"Fetching videos from {channel_url}...")
-        videos = fetch_channel_videos(channel_url, filter_type)
+        videos = fetch_channel_videos(channel_url, api_key)
         print(f"  Found {len(videos)} video(s)")
         all_videos.extend(videos)
 
