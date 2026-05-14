@@ -100,17 +100,11 @@ def download_audio(url: str, filename: str, output_dir: str) -> Path:
         # iOS client avoids bot-detection sign-in prompts
         "extractor_args": {"youtube": {"player_client": ["ios"]}},
     }
-    cookies_file = os.environ.get("YTDLP_COOKIES_FILE")
-    cookies_content = os.environ.get("YTDLP_COOKIES")
     tmp_cookies: Path | None = None
-
-    if cookies_content and not cookies_file:
+    if cookies_content := os.environ.get("YTDLP_COOKIES"):
         tmp_cookies = Path(tempfile.mktemp(suffix=".txt"))
         tmp_cookies.write_text(cookies_content)
-        cookies_file = str(tmp_cookies)
-
-    if cookies_file:
-        ydl_opts["cookiefile"] = cookies_file
+        ydl_opts["cookiefile"] = str(tmp_cookies)
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
