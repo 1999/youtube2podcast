@@ -5,7 +5,7 @@ Converts YouTube channels into a podcast feed hosted on Cloudflare R2.
 ## Requirements
 
 - Python 3.10+
-- [uv](https://astral.sh/uv) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- [uv](https://astral.sh/uv) — `curl -LsSf https://astral.sh/uv/install.sh | sh` (fast Python package manager)
 - ffmpeg — `brew install ffmpeg`
 
 ## Setup
@@ -14,6 +14,7 @@ Converts YouTube channels into a podcast feed hosted on Cloudflare R2.
    ```bash
    make setup
    ```
+   This uses [uv](https://astral.sh/uv) to create a virtual environment and install dependencies from `uv.lock` for reproducible installs.
 
 2. Copy `.env.example` to `.env` and fill in your credentials:
    ```
