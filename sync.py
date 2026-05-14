@@ -67,17 +67,6 @@ def make_filename(video_id: str) -> str:
     return f"{video_id}.mp3"
 
 
-def fetch_metadata(url: str) -> dict:
-    ydl_opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-    return info
-
-
 def parse_publish_date(upload_date: str) -> datetime:
     try:
         return datetime.strptime(upload_date, "%Y%m%d").replace(tzinfo=timezone.utc)
@@ -94,7 +83,7 @@ def format_duration(seconds: int | float | None) -> str:
     return f"{s // 3600}:{(s % 3600) // 60:02d}:{s % 60:02d}"
 
 
-def download_audio(url: str, filename: str, output_dir: str) -> tuple[Path, dict]:
+def download_audio(url: str, filename: str, output_dir: str) -> Path:
     stem = Path(filename).stem
     outtmpl = str(Path(output_dir) / stem)
 
@@ -108,9 +97,14 @@ def download_audio(url: str, filename: str, output_dir: str) -> tuple[Path, dict
                 "preferredquality": "192",
             }
         ],
+        # iOS client avoids bot-detection sign-in prompts
+        "extractor_args": {"youtube": {"player_client": ["ios"]}},
     }
+    if cookies_file := os.environ.get("YTDLP_COOKIES_FILE"):
+        ydl_opts["cookiefile"] = cookies_file
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+        ydl.download([url])
 
     output_path = Path(output_dir) / filename
     if not output_path.exists():
@@ -118,7 +112,7 @@ def download_audio(url: str, filename: str, output_dir: str) -> tuple[Path, dict
             f"Expected output file not found: {output_path}. "
             "Check that ffmpeg is installed and on PATH."
         )
-    return output_path, info
+    return output_path
 
 
 def _youtube_api_get(endpoint: str, params: dict) -> dict:
@@ -198,6 +192,7 @@ def fetch_channel_videos(channel_url: str, api_key: str, max_results: int = 3) -
             "video_id": video_id,
             "url": f"https://www.youtube.com/watch?v={video_id}",
             "title": snippet.get("title") or f"Video {video_id}",
+            "description": (snippet.get("description") or "")[:2000],
             "duration": _parse_iso_duration(item["contentDetails"].get("duration", "")),
             "upload_date": upload_date,
             "channel_url": channel_url,
@@ -215,45 +210,32 @@ def download_and_cache(video: dict, downloads_dir: Path, state: dict) -> dict | 
         print(f"  Already cached: {dest.name}")
         return state[video_id]
 
+    pub_dt = parse_publish_date(video.get("upload_date") or "")
+    entry = {
+        "url": video["url"],
+        "filename": make_filename(video_id),
+        "title": video["title"],
+        "description": video.get("description") or "",
+        "duration": int(video.get("duration") or 0),
+        "publish_date": pub_dt.isoformat(),
+        "channel_url": video["channel_url"],
+        "channel_name": video["channel_name"],
+    }
+
     if dest.exists() and video_id not in state:
-        print(f"  File exists, fetching metadata...")
-        try:
-            info = fetch_metadata(video["url"])
-        except Exception as e:
-            print(f"  WARNING: Failed to fetch metadata: {e}", file=sys.stderr)
-            return None
-        pub_dt = parse_publish_date(info.get("upload_date") or "")
-        return {
-            "url": video["url"],
-            "filename": make_filename(video_id),
-            "title": info.get("title") or video["title"],
-            "description": (info.get("description") or "")[:2000],
-            "duration": int(info.get("duration") or 0),
-            "publish_date": pub_dt.isoformat(),
-            "file_size": dest.stat().st_size,
-            "channel_url": video["channel_url"],
-            "channel_name": video["channel_name"],
-        }
+        print(f"  File exists, using API metadata.")
+        entry["file_size"] = dest.stat().st_size
+        return entry
 
     print(f"  Downloading: {video['title']!r}")
     try:
-        _, info = download_audio(video["url"], make_filename(video_id), str(downloads_dir))
+        download_audio(video["url"], make_filename(video_id), str(downloads_dir))
     except Exception as e:
         print(f"  WARNING: Failed to download: {e}", file=sys.stderr)
         return None
 
-    pub_dt = parse_publish_date(info.get("upload_date") or "")
-    return {
-        "url": video["url"],
-        "filename": make_filename(video_id),
-        "title": info.get("title") or video["title"],
-        "description": (info.get("description") or "")[:2000],
-        "duration": int(info.get("duration") or 0),
-        "publish_date": pub_dt.isoformat(),
-        "file_size": dest.stat().st_size,
-        "channel_url": video["channel_url"],
-        "channel_name": video["channel_name"],
-    }
+    entry["file_size"] = dest.stat().st_size
+    return entry
 
 
 def make_r2_client(cfg: dict):
