@@ -1,10 +1,9 @@
 .venv:
-	uv venv
-	uv pip install -r requirements.txt
+	uv sync
 
 setup: .venv
 
 sync: .venv
-	.venv/bin/python sync.py
+	uv run sync.py
 
 .PHONY: setup sync
