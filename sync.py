@@ -355,7 +355,14 @@ def main() -> None:
     if not all_videos:
         sys.exit("No videos found from any channel.")
 
-    selected = all_videos
+    # Filter out videos shorter than 2 minutes (120 seconds)
+    MIN_DURATION_SECONDS = 120
+    selected = [v for v in all_videos if v.get("duration", 0) >= MIN_DURATION_SECONDS]
+    skipped_short = len(all_videos) - len(selected)
+
+    if skipped_short > 0:
+        print(f"Skipped {skipped_short} video(s) shorter than 2 minutes")
+
     print(f"\n{len(selected)} episode(s) to process.")
 
     # Fail fast on R2 credentials before any downloading
