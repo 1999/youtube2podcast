@@ -97,8 +97,6 @@ def download_audio(url: str, filename: str, output_dir: str) -> Path:
                 "preferredquality": "192",
             }
         ],
-        # iOS client avoids bot-detection sign-in prompts
-        "extractor_args": {"youtube": {"player_client": ["ios"]}},
     }
     tmp_cookies: Path | None = None
     if cookies_content := os.environ.get("YTDLP_COOKIES"):
