@@ -88,7 +88,7 @@ def download_audio(url: str, filename: str, output_dir: str) -> Path:
     outtmpl = str(Path(output_dir) / stem)
 
     ydl_opts = {
-        "format": "bestaudio/best",
+        "format": "best[ext=mp4]/best",
         "outtmpl": outtmpl,
         "postprocessors": [
             {
