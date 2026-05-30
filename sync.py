@@ -422,6 +422,7 @@ def build_feed(cfg: dict, state: dict) -> bytes:
     fg.podcast.itunes_explicit("no")
     if pc.get("image_url"):
         fg.podcast.itunes_image(pc["image_url"])
+        fg.image(url=pc["image_url"], title=pc["title"])
 
     processed = []
     for video_id, entry in state.items():
