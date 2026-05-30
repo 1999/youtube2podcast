@@ -14,6 +14,10 @@ r2:
 
 filter: videos # videos | shorts | all
 
+youtube_videos:
+  # Add individual YouTube video URLs here:
+  # - https://www.youtube.com/watch?v=VIDEO_ID
+
 youtube_channels:
   # Add YouTube channel URLs here:
   # - https://www.youtube.com/@channelhandle
