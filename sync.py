@@ -34,8 +34,16 @@ def load_config() -> dict:
         if not cfg.get(section, {}).get(key):
             sys.exit(f"Error: config.yaml missing required field '{section}.{key}'")
     cfg["r2"].setdefault("feed_filename", "feed.xml")
-    if not cfg.get("youtube_channels") or not isinstance(cfg["youtube_channels"], list):
-        sys.exit("Error: config.yaml missing required field 'youtube_channels' (must be a list of URLs)")
+    channels = cfg.get("youtube_channels") or []
+    videos = cfg.get("youtube_videos") or []
+    if not isinstance(channels, list):
+        sys.exit("Error: config.yaml 'youtube_channels' must be a list of URLs")
+    if not isinstance(videos, list):
+        sys.exit("Error: config.yaml 'youtube_videos' must be a list of URLs")
+    if not channels and not videos:
+        sys.exit("Error: config.yaml must have at least one entry in 'youtube_channels' or 'youtube_videos'")
+    cfg["youtube_channels"] = channels
+    cfg["youtube_videos"] = videos
     return cfg
 
 
@@ -206,6 +214,52 @@ def fetch_channel_videos(channel_url: str, api_key: str, max_results: int = 3) -
     return videos
 
 
+def _extract_video_id(url: str) -> str | None:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.hostname in ("youtu.be",):
+        return parsed.path.lstrip("/").split("/")[0] or None
+    if parsed.hostname in ("www.youtube.com", "youtube.com", "m.youtube.com"):
+        if parsed.path.startswith("/shorts/"):
+            return parsed.path.split("/shorts/")[1].split("/")[0] or None
+        qs = urllib.parse.parse_qs(parsed.query)
+        return (qs.get("v") or [None])[0]
+    return None
+
+
+def fetch_video_details(video_url: str, api_key: str) -> dict | None:
+    video_id = _extract_video_id(video_url)
+    if not video_id:
+        print(f"  WARNING: Could not extract video ID from URL: {video_url}", file=sys.stderr)
+        return None
+    try:
+        data = _youtube_api_get("videos", {
+            "part": "snippet,contentDetails",
+            "id": video_id,
+            "key": api_key,
+        })
+    except Exception as e:
+        print(f"  WARNING: Failed to fetch video details for {video_url}: {e}", file=sys.stderr)
+        return None
+    items = data.get("items") or []
+    if not items:
+        print(f"  WARNING: Video not found: {video_url}", file=sys.stderr)
+        return None
+    item = items[0]
+    snippet = item["snippet"]
+    published_at = snippet.get("publishedAt", "")
+    upload_date = published_at[:10].replace("-", "") if published_at else ""
+    return {
+        "video_id": video_id,
+        "url": f"https://www.youtube.com/watch?v={video_id}",
+        "title": snippet.get("title") or f"Video {video_id}",
+        "description": (snippet.get("description") or "")[:2000],
+        "duration": _parse_iso_duration(item["contentDetails"].get("duration", "")),
+        "upload_date": upload_date,
+        "channel_url": video_url,
+        "channel_name": snippet.get("channelTitle") or video_url,
+    }
+
+
 
 def download_and_cache(video: dict, downloads_dir: Path, state: dict) -> dict | None:
     video_id = video["video_id"]
@@ -350,8 +404,16 @@ def main() -> None:
         print(f"  Found {len(videos)} video(s)")
         all_videos.extend(videos)
 
+    # Fetch individually listed videos
+    for video_url in cfg["youtube_videos"]:
+        print(f"Fetching video {video_url}...")
+        video = fetch_video_details(video_url, api_key)
+        if video:
+            print(f"  Found: {video['title']!r}")
+            all_videos.append(video)
+
     if not all_videos:
-        sys.exit("No videos found from any channel.")
+        sys.exit("No videos found from any channel or individual video URL.")
 
     # Filter out videos shorter than 2 minutes (120 seconds)
     MIN_DURATION_SECONDS = 120
