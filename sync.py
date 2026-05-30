@@ -36,14 +36,18 @@ def load_config() -> dict:
     cfg["r2"].setdefault("feed_filename", "feed.xml")
     channels = cfg.get("youtube_channels") or []
     videos = cfg.get("youtube_videos") or []
+    playlists = cfg.get("youtube_playlists") or []
     if not isinstance(channels, list):
         sys.exit("Error: config.yaml 'youtube_channels' must be a list of URLs")
     if not isinstance(videos, list):
         sys.exit("Error: config.yaml 'youtube_videos' must be a list of URLs")
-    if not channels and not videos:
-        sys.exit("Error: config.yaml must have at least one entry in 'youtube_channels' or 'youtube_videos'")
+    if not isinstance(playlists, list):
+        sys.exit("Error: config.yaml 'youtube_playlists' must be a list of URLs")
+    if not channels and not videos and not playlists:
+        sys.exit("Error: config.yaml must have at least one entry in 'youtube_channels', 'youtube_videos', or 'youtube_playlists'")
     cfg["youtube_channels"] = channels
     cfg["youtube_videos"] = videos
+    cfg["youtube_playlists"] = playlists
     return cfg
 
 
@@ -226,6 +230,69 @@ def _extract_video_id(url: str) -> str | None:
     return None
 
 
+def fetch_playlist_videos(playlist_url: str, api_key: str) -> list[dict]:
+    parsed = urllib.parse.urlparse(playlist_url)
+    playlist_id = urllib.parse.parse_qs(parsed.query).get("list", [None])[0]
+    if not playlist_id:
+        print(f"  WARNING: Could not extract playlist ID from URL: {playlist_url}", file=sys.stderr)
+        return []
+
+    items = []
+    page_token = None
+    while True:
+        params = {
+            "part": "snippet",
+            "playlistId": playlist_id,
+            "maxResults": 50,
+            "key": api_key,
+        }
+        if page_token:
+            params["pageToken"] = page_token
+        try:
+            data = _youtube_api_get("playlistItems", params)
+        except Exception as e:
+            print(f"  WARNING: Failed to fetch playlist items: {e}", file=sys.stderr)
+            break
+        items.extend(data.get("items") or [])
+        page_token = data.get("nextPageToken")
+        if not page_token:
+            break
+
+    if not items:
+        return []
+
+    videos = []
+    # Fetch video details in batches of 50
+    video_ids = [item["snippet"]["resourceId"]["videoId"] for item in items]
+    for i in range(0, len(video_ids), 50):
+        batch = video_ids[i:i + 50]
+        try:
+            details = _youtube_api_get("videos", {
+                "part": "snippet,contentDetails",
+                "id": ",".join(batch),
+                "key": api_key,
+            })
+        except Exception as e:
+            print(f"  WARNING: Failed to fetch video details for batch: {e}", file=sys.stderr)
+            continue
+        for item in details.get("items") or []:
+            video_id = item["id"]
+            snippet = item["snippet"]
+            published_at = snippet.get("publishedAt", "")
+            upload_date = published_at[:10].replace("-", "") if published_at else ""
+            videos.append({
+                "video_id": video_id,
+                "url": f"https://www.youtube.com/watch?v={video_id}",
+                "title": snippet.get("title") or f"Video {video_id}",
+                "description": (snippet.get("description") or "")[:2000],
+                "duration": _parse_iso_duration(item["contentDetails"].get("duration", "")),
+                "upload_date": upload_date,
+                "channel_url": playlist_url,
+                "channel_name": snippet.get("channelTitle") or playlist_url,
+            })
+    return videos
+
+
 def fetch_video_details(video_url: str, api_key: str) -> dict | None:
     video_id = _extract_video_id(video_url)
     if not video_id:
@@ -401,6 +468,13 @@ def main() -> None:
     for channel_url in cfg["youtube_channels"]:
         print(f"Fetching videos from {channel_url}...")
         videos = fetch_channel_videos(channel_url, api_key)
+        print(f"  Found {len(videos)} video(s)")
+        all_videos.extend(videos)
+
+    # Fetch videos from user-curated playlists (dynamic source)
+    for playlist_url in cfg["youtube_playlists"]:
+        print(f"Fetching playlist {playlist_url}...")
+        videos = fetch_playlist_videos(playlist_url, api_key)
         print(f"  Found {len(videos)} video(s)")
         all_videos.extend(videos)
 

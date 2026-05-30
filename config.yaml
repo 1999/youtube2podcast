@@ -14,6 +14,10 @@ r2:
 
 filter: videos # videos | shorts | all
 
+youtube_playlists:
+  # Add YouTube playlist URLs here — videos you curate dynamically without editing this file:
+  - https://youtube.com/playlist?list=PLdGBSf5QeI2cGfe1kAjZHrT0U0bjzl5QI
+
 youtube_videos:
   # Add individual YouTube video URLs here:
   # - https://www.youtube.com/watch?v=VIDEO_ID
