@@ -430,7 +430,10 @@ def build_feed(cfg: dict, state: dict) -> bytes:
         if pub.tzinfo is None:
             pub = pub.replace(tzinfo=timezone.utc)
         processed.append((pub, video_id, entry))
+    # Sort by publish date in descending order (newest episodes first)
+    # Note: feedgen outputs entries in reverse of insertion order, so we reverse again
     processed.sort(key=lambda x: x[0], reverse=True)
+    processed.reverse()  # Reverse to account for feedgen's reverse output
 
     for pub_dt, video_id, entry in processed:
         mp3_url = f"{r2['public_base_url'].rstrip('/')}/{entry['filename']}"
