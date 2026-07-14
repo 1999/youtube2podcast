@@ -2,15 +2,18 @@ AGENT_LABEL := com.dsorin2035.youtube2podcast-sync
 AGENT_PLIST := $(HOME)/Library/LaunchAgents/$(AGENT_LABEL).plist
 REPO_DIR := $(CURDIR)
 
+SHELL := /bin/bash
+
 .venv:
 	uv sync
 
 setup: .venv
 
 sync: .venv
-	git checkout main
-	git pull origin main
-	uv run sync.py
+	@mkdir -p logs
+	set -o pipefail; \
+	{ git checkout main && git pull origin main && uv run sync.py; } 2>&1 | \
+	while IFS= read -r line; do printf '[%s] %s\n' "$$(date '+%Y-%m-%d %H:%M:%S')" "$$line"; done | tee -a logs/sync.log
 
 install-agent:
 	mkdir -p $(REPO_DIR)/logs

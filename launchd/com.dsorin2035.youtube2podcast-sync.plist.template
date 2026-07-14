@@ -7,8 +7,9 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/make</string>
-        <string>sync</string>
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <string>/usr/bin/make sync >> {{REPO_DIR}}/logs/sync.out.log 2>> {{REPO_DIR}}/logs/sync.err.log</string>
     </array>
 
     <key>WorkingDirectory</key>
@@ -21,12 +22,6 @@
         <key>Minute</key>
         <integer>0</integer>
     </dict>
-
-    <key>StandardOutPath</key>
-    <string>{{REPO_DIR}}/logs/sync.out.log</string>
-
-    <key>StandardErrorPath</key>
-    <string>{{REPO_DIR}}/logs/sync.err.log</string>
 
     <key>EnvironmentVariables</key>
     <dict>
